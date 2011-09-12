@@ -1,0 +1,27 @@
+name:          usb-example
+version:       0.1
+cabal-version: >=1.6
+build-type:    Simple
+license:       BSD3
+license-file:  LICENSE
+copyright:     2011–2011 Bas van Dijk <v.dijk.bas@gmail.com>
+author:        Bas van Dijk <v.dijk.bas@gmail.com>
+maintainer:    Bas van Dijk <v.dijk.bas@gmail.com>
+homepage:      https://github.com/basvandijk/usb-example/
+bug-reports:   https://github.com/basvandijk/usb-example/issues
+category:      System
+synopsis:      Example how to use the usb library
+
+source-repository head
+  Type:     git
+  Location: git://github.com/basvandijk/usb-example.git
+
+executable example
+  main-is: example.hs
+
+  GHC-Options: -Wall -threaded
+
+  build-depends: base                 >= 4     && < 4.5
+               , base-unicode-symbols >= 0.1.1 && < 0.3
+               , usb                  >= 1.0   && < 1.1
+               , bytestring           >= 0.9   && < 0.10
