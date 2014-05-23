@@ -1,5 +1,3 @@
-{-# LANGUAGE UnicodeSyntax #-}
-
 module Main where
 
 -- from base:
@@ -9,11 +7,6 @@ import Data.Functor
 import Data.List
 import Control.Monad
 import Text.Printf
-
--- from base-unicode-symbols:
-import Data.Eq.Unicode       ( (≡) )
-import Data.Bool.Unicode     ( (∧) )
-import Data.Function.Unicode ( (∘) )
 
 -- from bytestring:
 import qualified Data.ByteString as B ( ByteString, length, unpack )
@@ -25,21 +18,21 @@ import qualified Data.Vector as V ( toList )
 -- from usb:
 import System.USB
 
-main ∷ IO ()
+main :: IO ()
 main = do
   -- Initialization:
-  ctx ← newCtx
+  ctx <- newCtx
   setDebug ctx PrintInfo
 
   -- Enumerating devices & finding the right device:
-  devs ← V.toList <$> getDevices ctx
+  devs <- V.toList <$> getDevices ctx
   deviceDescs <- mapM getDeviceDesc devs
   case fmap fst $ find (isMyMouse . snd) $ zip devs deviceDescs of
-    Nothing → hPutStrLn stderr "Mouse not found" >> exitFailure
-    Just dev →
+    Nothing -> hPutStrLn stderr "Mouse not found" >> exitFailure
+    Just dev ->
 
       -- Opening the device:
-      withDeviceHandle dev $ \devHndl →
+      withDeviceHandle dev $ \devHndl ->
         withDetachedKernelDriver devHndl 0 $
           withClaimedInterface devHndl 0 $ do
 
@@ -55,21 +48,21 @@ main = do
                 timeout = 5000
 
             -- Performing I/O:
-            _ ← printf "Reading %i bytes during a maximum of %i ms...\n"
+            _ <- printf "Reading %i bytes during a maximum of %i ms...\n"
                         nrOfBytesToRead timeout
 
-            (bs, status) ← readInterrupt devHndl
-                                         (endpointAddress endpoint1)
-                                         nrOfBytesToRead
-                                         timeout
+            (bs, status) <- readInterrupt devHndl
+                                          (endpointAddress endpoint1)
+                                          nrOfBytesToRead
+                                          timeout
 
-            when (status ≡ TimedOut) $ putStrLn "Reading timed out!"
-            _ ← printf "Read %i bytes:\n" $ B.length bs
+            when (status == TimedOut) $ putStrLn "Reading timed out!"
+            _ <- printf "Read %i bytes:\n" $ B.length bs
             printBytes bs
 
-isMyMouse ∷ DeviceDesc → Bool
-isMyMouse devDesc = deviceVendorId  devDesc ≡ 0x045e
-                  ∧ deviceProductId devDesc ≡ 0x0040
+isMyMouse :: DeviceDesc -> Bool
+isMyMouse devDesc =  deviceVendorId  devDesc == 0x045e
+                  && deviceProductId devDesc == 0x0040
 
-printBytes ∷ B.ByteString → IO ()
-printBytes = putStrLn ∘ intercalate " " ∘ map show ∘ B.unpack
+printBytes :: B.ByteString -> IO ()
+printBytes = putStrLn . intercalate " " . map show . B.unpack
