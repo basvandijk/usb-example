@@ -24,57 +24,79 @@ main = do
   ctx <- newCtx
   setDebug ctx PrintInfo
 
-  -- Check for the availability of capabilities:
-  let capabilities = [ HasCapability
-                     , HasHotplug
-                     , HasHidAccess
-                     , SupportsDetachKernelDriver
-                     ]
-  forM_ capabilities $ \capability ->
-    putStrLn $ "Capability " ++ show capability ++
-      if hasCapability ctx capability
-        then " is available."
-        else " is not available."
+  -- Device retrieval:
+  dev <- if ctx `hasCapability` HasHotplug
+         then waitForMyDevice ctx
+         else findMyDevice ctx
 
-  -- Enumerating devices & finding the right device:
-  devs <- V.toList <$> getDevices ctx
-  deviceDescs <- mapM getDeviceDesc devs
-  case fmap fst $ find (isMyMouse . snd) $ zip devs deviceDescs of
-    Nothing -> hPutStrLn stderr "Mouse not found" >> exitFailure
-    Just dev ->
+  -- Device usage:
+  doSomethingWithDevice dev
 
-      -- Opening the device:
-      withDeviceHandle dev $ \devHndl ->
-        withDetachedKernelDriver devHndl 0 $
-          withClaimedInterface devHndl 0 $ do
+waitForMyDevice :: Ctx -> IO Device
+waitForMyDevice ctx = do
+  putStrLn "Waiting for device attachment..."
+  (dev, _event) <- waitForFirstHotplugEvent
+                     ctx
+                     deviceArrived
+                     enumerate
+                     (Just myVendorId)
+                     (Just myProductId)
+                     Nothing -- match any device class
+  return dev
 
-            -- Inspecting descriptors:
-            config0 <- getConfigDesc dev 0
-            let interface0 = configInterfaces config0 ! 0
-                alternate0 = interface0 ! 0
-                endpoint1  = interfaceEndpoints alternate0 ! 0
-                mps        = maxPacketSize $ endpointMaxPacketSize endpoint1
+-- Enumeratie all devices and find the right one.
+findMyDevice :: Ctx -> IO Device
+findMyDevice ctx = do
+    devs <- V.toList <$> getDevices ctx
+    deviceDescs <- mapM getDeviceDesc devs
+    case fmap fst $ find (isMyMouse . snd) $ zip devs deviceDescs of
+      Nothing  -> hPutStrLn stderr "Mouse not found" >> exitFailure
+      Just dev -> return dev
+  where
+    isMyMouse :: DeviceDesc -> Bool
+    isMyMouse devDesc =  deviceVendorId  devDesc == myVendorId
+                      && deviceProductId devDesc == myProductId
 
-                nrOfBytesToRead = 20 * mps
+myVendorId :: VendorId
+myVendorId = 0x045e
 
-                timeout = 5000
+myProductId :: ProductId
+myProductId = 0x0040
 
-            -- Performing I/O:
-            _ <- printf "Reading %i bytes during a maximum of %i ms...\n"
-                        nrOfBytesToRead timeout
+doSomethingWithDevice :: Device -> IO ()
+doSomethingWithDevice dev = do
+  putStrLn "Opening device..."
+  withDeviceHandle dev $ \devHndl -> do
 
-            (bs, status) <- readInterrupt devHndl
-                                          (endpointAddress endpoint1)
-                                          nrOfBytesToRead
-                                          timeout
+    putStrLn "Detaching kernel driver..."
+    withDetachedKernelDriver devHndl 0 $ do
 
-            when (status == TimedOut) $ putStrLn "Reading timed out!"
-            _ <- printf "Read %i bytes:\n" $ B.length bs
-            printBytes bs
+      putStrLn "Claiming interface..."
+      withClaimedInterface devHndl 0 $ do
 
-isMyMouse :: DeviceDesc -> Bool
-isMyMouse devDesc =  deviceVendorId  devDesc == 0x045e
-                  && deviceProductId devDesc == 0x0040
+        -- Inspecting descriptors:
+        config0 <- getConfigDesc dev 0
+        let interface0 = configInterfaces config0 ! 0
+            alternate0 = interface0 ! 0
+            endpoint1  = interfaceEndpoints alternate0 ! 0
+            mps        = maxPacketSize $ endpointMaxPacketSize endpoint1
+
+            nrOfBytesToRead = 20 * mps
+
+            timeout = 5000
+
+        -- Performing I/O:
+        _ <- printf "Reading %i bytes during a maximum of %i ms...\n"
+                    nrOfBytesToRead timeout
+
+        (bs, status) <- readInterrupt devHndl
+                                      (endpointAddress endpoint1)
+                                      nrOfBytesToRead
+                                      timeout
+
+        when (status == TimedOut) $ putStrLn "Reading timed out!"
+        _ <- printf "Read %i bytes:\n" $ B.length bs
+        printBytes bs
 
 printBytes :: B.ByteString -> IO ()
 printBytes = putStrLn . intercalate " " . map show . B.unpack
