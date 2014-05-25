@@ -24,6 +24,18 @@ main = do
   ctx <- newCtx
   setDebug ctx PrintInfo
 
+  -- Check for the availability of capabilities:
+  let capabilities = [ HasCapability
+                     , HasHotplug
+                     , HasHidAccess
+                     , SupportsDetachKernelDriver
+                     ]
+  forM_ capabilities $ \capability ->
+    putStrLn $ "Capability " ++ show capability ++
+      if hasCapability ctx capability
+        then " is available."
+        else " is not available."
+
   -- Enumerating devices & finding the right device:
   devs <- V.toList <$> getDevices ctx
   deviceDescs <- mapM getDeviceDesc devs
