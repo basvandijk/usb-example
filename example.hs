@@ -22,7 +22,7 @@ main :: IO ()
 main = do
   -- Initialization:
   ctx <- newCtx
-  setDebug ctx PrintInfo
+  setDebug ctx PrintDebug
 
   -- Device retrieval:
   dev <- if ctx `hasCapability` HasHotplug
@@ -65,6 +65,8 @@ myProductId = 0x0040
 
 doSomethingWithDevice :: Device -> IO ()
 doSomethingWithDevice dev = do
+  mapM_ putStrLn $ deviceInfos dev
+
   putStrLn "Opening device..."
   withDeviceHandle dev $ \devHndl -> do
 
@@ -97,6 +99,24 @@ doSomethingWithDevice dev = do
         when (status == TimedOut) $ putStrLn "Reading timed out!"
         _ <- printf "Read %i bytes:\n" $ B.length bs
         printBytes bs
+
+deviceInfos :: Device -> [String]
+deviceInfos dev = deviceInfo dev ++
+  case parent dev of
+    Nothing -> []
+    Just parentDev ->
+        "Parent device:" :
+        map ("  " ++) (deviceInfos parentDev)
+
+deviceInfo :: Device -> [String]
+deviceInfo dev =
+  [ printf "deviceSpeed:   %s" (maybe "-" show $ deviceSpeed dev)
+  , printf "busNumber:     %s" (show $ busNumber dev)
+  , printf "portNumber:    %s" (show $ portNumber dev)
+  , printf "portNumbers:   %s" (maybe "-" (show . V.toList) $
+                                  portNumbers dev 7)
+  , printf "deviceAddress: %s" (show $ deviceAddress dev)
+  ]
 
 printBytes :: B.ByteString -> IO ()
 printBytes = putStrLn . intercalate " " . map show . B.unpack
