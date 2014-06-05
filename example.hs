@@ -15,6 +15,9 @@ import qualified Data.ByteString as B ( ByteString, length, unpack )
 import           Data.Vector      ( (!) )
 import qualified Data.Vector as V ( toList )
 
+-- from stm:
+import Control.Monad.STM ( atomically )
+
 -- from usb:
 import System.USB
 
@@ -35,13 +38,14 @@ main = do
 waitForMyDevice :: Ctx -> IO Device
 waitForMyDevice ctx = do
   putStrLn "Waiting for device attachment..."
-  (dev, _event) <- waitForFirstHotplugEvent
-                     ctx
-                     deviceArrived
-                     enumerate
-                     (Just myVendorId)
-                     (Just myProductId)
-                     Nothing -- match any device class
+  waitForEvent <- firstHotplugEvent
+                    ctx
+                    deviceArrived
+                    enumerate
+                    (Just myVendorId)
+                    (Just myProductId)
+                    Nothing -- match any device class
+  (dev, _event) <- atomically waitForEvent
   return dev
 
 -- Enumeratie all devices and find the right one.
