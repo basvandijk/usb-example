@@ -1,6 +1,8 @@
 module Main where
 
 -- from base:
+import Control.Exception
+import Control.Concurrent.MVar
 import System.IO
 import System.Exit
 import Data.Functor
@@ -14,9 +16,6 @@ import qualified Data.ByteString as B ( ByteString, length, unpack )
 -- from vector:
 import           Data.Vector      ( (!) )
 import qualified Data.Vector as V ( toList )
-
--- from stm:
-import Control.Monad.STM ( atomically )
 
 -- from usb:
 import System.USB
@@ -38,14 +37,19 @@ main = do
 waitForMyDevice :: Ctx -> IO Device
 waitForMyDevice ctx = do
   putStrLn "Waiting for device attachment..."
-  waitForEvent <- firstHotplugEvent
-                    ctx
-                    deviceArrived
-                    enumerate
-                    (Just myVendorId)
-                    (Just myProductId)
-                    Nothing -- match any device class
-  (dev, _event) <- atomically waitForEvent
+  mv <- newEmptyMVar
+  mask_ $ do
+    h <- registerHotplugCallback ctx
+                                 deviceArrived
+                                 enumerate
+                                 (Just myVendorId)
+                                 (Just myProductId)
+                                 Nothing
+                                 (\dev event ->
+                                    tryPutMVar mv (dev, event) $>
+                                      DeregisterThisCallback)
+    void $ mkWeakMVar mv $ deregisterHotplugCallback h
+  (dev, _event) <- takeMVar mv
   return dev
 
 -- Enumeratie all devices and find the right one.
