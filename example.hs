@@ -73,7 +73,7 @@ myProductId = 0x0040
 
 doSomethingWithDevice :: Device -> IO ()
 doSomethingWithDevice dev = do
-  mapM_ putStrLn $ deviceInfos dev
+  putStrLn $ unlines $ deviceInfo dev
 
   putStrLn "Opening device..."
   withDeviceHandle dev $ \devHndl -> do
@@ -107,14 +107,6 @@ doSomethingWithDevice dev = do
         when (status == TimedOut) $ putStrLn "Reading timed out!"
         _ <- printf "Read %i bytes:\n" $ B.length bs
         printBytes bs
-
-deviceInfos :: Device -> [String]
-deviceInfos dev = deviceInfo dev ++
-  case parent dev of
-    Nothing -> []
-    Just parentDev ->
-        "Parent device:" :
-        map ("  " ++) (deviceInfos parentDev)
 
 deviceInfo :: Device -> [String]
 deviceInfo dev =
