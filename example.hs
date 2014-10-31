@@ -90,23 +90,33 @@ doSomethingWithDevice dev = do
             alternate0 = interface0 ! 0
             endpoint1  = interfaceEndpoints alternate0 ! 0
             mps        = maxPacketSize $ endpointMaxPacketSize endpoint1
+            timeout    = 5000
 
-            nrOfBytesToRead = 20 * mps
+        printf "maxPacketSize = %i\n" mps
 
-            timeout = 5000
+        putStrLn "Creating transfer..."
+        readTrans <- newReadTransfer
+                       InterruptTransfer
+                       devHndl
+                       (endpointAddress endpoint1)
+                       0
+                       timeout
 
         -- Performing I/O:
-        _ <- printf "Reading %i bytes during a maximum of %i ms...\n"
-                    nrOfBytesToRead timeout
+        let n = 3 :: Int
+        forM_ [0..n-1] $ \i -> do
+          let size = (2^i) * mps
 
-        (bs, status) <- readInterrupt devHndl
-                                      (endpointAddress endpoint1)
-                                      nrOfBytesToRead
-                                      timeout
+          _ <- printf "(%i/%i) reading %i bytes during a maximum of %i ms...\n"
+                      (i+1) n size timeout
 
-        when (status == TimedOut) $ putStrLn "Reading timed out!"
-        _ <- printf "Read %i bytes:\n" $ B.length bs
-        printBytes bs
+          setReadTransferSize readTrans size
+
+          (bs, status) <- performReadTransfer readTrans
+
+          when (status == TimedOut) $ putStrLn "Reading timed out!"
+          _ <- printf "Read %i bytes:\n" $ B.length bs
+          printBytes bs
 
 deviceInfo :: Device -> [String]
 deviceInfo dev =
@@ -119,4 +129,4 @@ deviceInfo dev =
   ]
 
 printBytes :: B.ByteString -> IO ()
-printBytes = putStrLn . intercalate " " . map show . B.unpack
+printBytes = putStrLn . intercalate " " . map (printf "0x%02x") . B.unpack
