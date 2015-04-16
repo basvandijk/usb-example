@@ -4,6 +4,7 @@ module Main where
 import Control.Exception
 import Control.Concurrent.MVar
 import System.IO
+import System.Environment
 import System.Exit
 import Data.Functor
 import Data.List
@@ -22,28 +23,32 @@ import System.USB
 
 main :: IO ()
 main = do
+  [vendorIdStr, productIdStr] <- getArgs
+  let vendorId  = read vendorIdStr
+      productId = read productIdStr
+
   -- Initialization:
   ctx <- newCtx
   setDebug ctx PrintDebug
 
   -- Device retrieval:
   dev <- if ctx `hasCapability` HasHotplug
-         then waitForMyDevice ctx
-         else findMyDevice ctx
+         then waitForMyDevice ctx vendorId productId
+         else findMyDevice ctx vendorId productId
 
   -- Device usage:
   doSomethingWithDevice dev
 
-waitForMyDevice :: Ctx -> IO Device
-waitForMyDevice ctx = do
+waitForMyDevice :: Ctx -> VendorId -> ProductId -> IO Device
+waitForMyDevice ctx vendorId productId = do
   putStrLn "Waiting for device attachment..."
   mv <- newEmptyMVar
   mask_ $ do
     h <- registerHotplugCallback ctx
                                  deviceArrived
                                  enumerate
-                                 (Just myVendorId)
-                                 (Just myProductId)
+                                 (Just vendorId)
+                                 (Just productId)
                                  Nothing
                                  (\dev event ->
                                     tryPutMVar mv (dev, event) $>
@@ -53,23 +58,17 @@ waitForMyDevice ctx = do
   return dev
 
 -- Enumeratie all devices and find the right one.
-findMyDevice :: Ctx -> IO Device
-findMyDevice ctx = do
+findMyDevice :: Ctx -> VendorId -> ProductId -> IO Device
+findMyDevice ctx vendorId productId = do
     devs <- V.toList <$> getDevices ctx
     deviceDescs <- mapM getDeviceDesc devs
-    case fmap fst $ find (isMyMouse . snd) $ zip devs deviceDescs of
+    case fmap fst $ find (match . snd) $ zip devs deviceDescs of
       Nothing  -> hPutStrLn stderr "Mouse not found" >> exitFailure
       Just dev -> return dev
   where
-    isMyMouse :: DeviceDesc -> Bool
-    isMyMouse devDesc =  deviceVendorId  devDesc == myVendorId
-                      && deviceProductId devDesc == myProductId
-
-myVendorId :: VendorId
-myVendorId = 0x045e
-
-myProductId :: ProductId
-myProductId = 0x0040
+    match :: DeviceDesc -> Bool
+    match devDesc =  deviceVendorId  devDesc == vendorId
+                  && deviceProductId devDesc == productId
 
 doSomethingWithDevice :: Device -> IO ()
 doSomethingWithDevice dev = do
